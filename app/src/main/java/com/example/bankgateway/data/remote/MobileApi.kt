@@ -18,7 +18,6 @@ class MobileApi(private val signer: HmacSigner = HmacSigner()) {
             .header("X-Device-Id", deviceId)
             .header("X-Timestamp", timestamp)
             .header("X-Signature", signature)
-            .header("X-Device-Secret-Debug", deviceSecret)
             .build()
     }
 

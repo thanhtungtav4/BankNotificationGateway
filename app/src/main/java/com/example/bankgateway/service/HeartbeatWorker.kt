@@ -2,6 +2,7 @@ package com.example.bankgateway.service
 
 import android.content.Context
 import android.os.BatteryManager
+import android.provider.Settings
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.bankgateway.data.local.DatabaseProvider
@@ -22,10 +23,10 @@ class HeartbeatWorker(appContext: Context, params: WorkerParameters) : Coroutine
 
         val rawBody = JSONObject()
             .put("battery_level", batteryManager.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY))
-            .put("is_charging", false)
-            .put("listener_enabled", true)
+            .put("is_charging", batteryManager.isCharging)
+            .put("listener_enabled", isNotificationListenerEnabled())
             .put("queue_pending", database.queuedNotificationDao().pendingCount())
-            .put("app_version", "1.0.0")
+            .put("app_version", appVersion())
             .put("android_version", android.os.Build.VERSION.RELEASE)
             .toString()
 
@@ -37,5 +38,20 @@ class HeartbeatWorker(appContext: Context, params: WorkerParameters) : Coroutine
         } catch (_: Throwable) {
             Result.retry()
         }
+    }
+
+    private fun isNotificationListenerEnabled(): Boolean {
+        val enabledListeners = Settings.Secure.getString(
+            applicationContext.contentResolver,
+            "enabled_notification_listeners"
+        ) ?: return false
+        val expected = "${applicationContext.packageName}/${BankNotificationListenerService::class.java.name}"
+        return enabledListeners.split(":").any { it == expected || it.startsWith("${applicationContext.packageName}/") }
+    }
+
+    private fun appVersion(): String = try {
+        applicationContext.packageManager.getPackageInfo(applicationContext.packageName, 0).versionName ?: "unknown"
+    } catch (_: Throwable) {
+        "unknown"
     }
 }

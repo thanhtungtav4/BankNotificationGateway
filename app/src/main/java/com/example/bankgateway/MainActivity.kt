@@ -138,7 +138,7 @@ fun PairingScreen() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val configStore = remember { DeviceConfigStore(context.applicationContext) }
-    val config by configStore.config.collectAsState(initial = null)
+    val config by configStore.config.collectAsState()
 
     var serverUrl by remember { mutableStateOf("http://10.0.2.2:8080") }
     var pairingToken by remember { mutableStateOf("tenant:1") }
@@ -177,12 +177,16 @@ fun PairingScreen() {
         Button(
             enabled = !isLoading,
             onClick = {
+                if (!isValidServerUrl(serverUrl)) {
+                    status = "Invalid server URL. Use http:// or https://"
+                    return@Button
+                }
                 scope.launch {
                     isLoading = true
                     status = "Pairing..."
                     try {
                         withContext(Dispatchers.IO) {
-                            PairingRepository(configStore).pair(serverUrl, pairingToken, deviceName)
+                            PairingRepository(configStore).pair(serverUrl.trim(), pairingToken.trim(), deviceName.trim())
                         }
                         status = "Paired successfully"
                     } catch (exception: Throwable) {
@@ -198,8 +202,8 @@ fun PairingScreen() {
 
         Divider()
         Text("Status: $status")
-        Text("Stored server: ${config?.serverUrl ?: "none"}")
-        Text("Stored device: ${config?.deviceId ?: "none"}")
+        Text("Stored server: ${config.serverUrl ?: "none"}")
+        Text("Stored device: ${config.deviceId ?: "none"}")
     }
 }
 
@@ -209,27 +213,30 @@ fun WhitelistScreen() {
     val database = remember { DatabaseProvider.get(context.applicationContext) }
     val scope = rememberCoroutineScope()
     var installedApps by remember { mutableStateOf<List<AppListItem>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
     val allowedPackages by database.allowedPackageDao().activePackages().collectAsState(initial = emptyList())
     val allowedSet = allowedPackages.map { it.packageName }.toSet()
 
     LaunchedEffect(Unit) {
         installedApps = withContext(Dispatchers.IO) {
-            context.packageManager.getInstalledApplications(0)
-                .filter { it.flags and ApplicationInfo.FLAG_SYSTEM == 0 || looksLikeBankApp(it.loadLabel(context.packageManager).toString(), it.packageName) }
-                .map {
-                    AppListItem(
-                        packageName = it.packageName,
-                        appName = it.loadLabel(context.packageManager).toString()
-                    )
-                }
+            val pm = context.packageManager
+            pm.getInstalledApplications(0)
+                .filter { it.flags and ApplicationInfo.FLAG_SYSTEM == 0 }
+                .map { AppListItem(packageName = it.packageName, appName = it.loadLabel(pm).toString()) }
                 .sortedBy { it.appName.lowercase() }
         }
+        isLoading = false
     }
 
     Column(modifier = Modifier.padding(16.dp)) {
         Text("Notification Whitelist", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text("Enable only bank apps. Notifications from disabled packages are ignored locally.")
         Spacer(modifier = Modifier.height(12.dp))
+
+        if (isLoading) {
+            Text("Loading installed apps...")
+            return@Column
+        }
 
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(installedApps, key = { it.packageName }) { app ->
@@ -302,16 +309,19 @@ fun SettingsScreen(onOpenNotificationSettings: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val configStore = remember { DeviceConfigStore(context.applicationContext) }
-    val config by configStore.config.collectAsState(initial = null)
-    val isPaired = config?.serverUrl != null && config?.deviceId != null && config?.deviceSecret != null
+    val config by configStore.config.collectAsState()
+    val isPaired = config.isPaired
+    val listenerEnabled = isNotificationListenerEnabled(context)
     var testStatus by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
+    var isResetting by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Settings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text("Server URL: ${config?.serverUrl ?: "none"}")
-        Text("Device ID: ${config?.deviceId ?: "none"}")
-        Text("Device Secret: ${if (config?.deviceSecret.isNullOrBlank()) "none" else "stored"}")
+        Text("Server URL: ${config.serverUrl ?: "none"}")
+        Text("Device ID: ${config.deviceId ?: "none"}")
+        Text("Device Secret: ${if (config.deviceSecret.isNullOrBlank()) "none" else "stored (encrypted)"}")
+        Text("Notification Access: ${if (listenerEnabled) "GRANTED" else "DENIED"}")
 
         Button(onClick = onOpenNotificationSettings) {
             Text("Open Notification Access Settings")
@@ -323,7 +333,7 @@ fun SettingsScreen(onOpenNotificationSettings: () -> Unit) {
         Button(
             enabled = isPaired && !isSending,
             onClick = {
-                val currentConfig = config ?: return@Button
+                val currentConfig = config
                 scope.launch {
                     isSending = true
                     testStatus = "Sending..."
@@ -332,8 +342,9 @@ fun SettingsScreen(onOpenNotificationSettings: () -> Unit) {
                         withContext(Dispatchers.IO) {
                             val database = DatabaseProvider.get(context.applicationContext)
                             NotificationRepository(
-                                database.queuedNotificationDao(),
-                                database.notificationLogDao()
+                                queueDao = database.queuedNotificationDao(),
+                                logDao = database.notificationLogDao(),
+                                context = context.applicationContext
                             ).sendOrQueue(
                                 config = currentConfig,
                                 packageName = "com.example.bankgateway.test",
@@ -361,8 +372,37 @@ fun SettingsScreen(onOpenNotificationSettings: () -> Unit) {
         }
 
         Divider()
+        Text("Pairing Management", fontWeight = FontWeight.Bold)
+        Button(
+            enabled = isPaired && !isResetting,
+            onClick = {
+                scope.launch {
+                    isResetting = true
+                    try {
+                        configStore.clear()
+                        testStatus = "Pairing cleared. Re-pair on the Pairing tab."
+                    } finally {
+                        isResetting = false
+                    }
+                }
+            }
+        ) {
+            Text(if (isResetting) "Clearing..." else "Disconnect / Reset Pairing")
+        }
+
+        Divider()
         Text("Background workers are scheduled every 15 minutes with network connectivity required.")
     }
+}
+
+private fun isNotificationListenerEnabled(context: android.content.Context): Boolean {
+    val enabled = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners") ?: return false
+    return enabled.split(":").any { it.startsWith("${context.packageName}/") }
+}
+
+internal fun isValidServerUrl(url: String): Boolean {
+    val trimmed = url.trim()
+    return (trimmed.startsWith("http://") || trimmed.startsWith("https://")) && trimmed.length > 8
 }
 
 private fun buildTestNotificationPayload(): String {
@@ -384,49 +424,3 @@ data class AppListItem(
     val packageName: String,
     val appName: String
 )
-
-fun looksLikeBankApp(appName: String, packageName: String): Boolean {
-    val text = "$appName $packageName".lowercase()
-    return listOf(
-        "bank",
-        "mb",
-        "vietcombank",
-        "vcb",
-        "acb",
-        "techcombank",
-        "tpbank",
-        "vpbank",
-        "bidv",
-        "vietinbank",
-        "msb",
-        "seabank",
-        "scb",
-        "hdbank",
-        "ocb",
-        "sacombank",
-        "nam a",
-        "namabank",
-        "viet a",
-        "vietabank",
-        "shb",
-        "vib",
-        "eximbank",
-        "lpbank",
-        "lienviet",
-        "pvcombank",
-        "bac a",
-        "baca",
-        "kienlong",
-        "saigonbank",
-        "ncb",
-        "bvbank",
-        "vietbank",
-        "abbank",
-        "pgbank",
-        "gpbank",
-        "cbbank",
-        "oceanbank",
-        "momo",
-        "zalopay"
-    ).any { text.contains(it) }
-}

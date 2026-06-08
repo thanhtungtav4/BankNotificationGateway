@@ -1,30 +1,61 @@
 package com.example.bankgateway.data.preferences
 
 import android.content.Context
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import android.content.SharedPreferences
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 
-private val Context.deviceConfigDataStore by preferencesDataStore(name = "device_config")
-
-class DeviceConfigStore(private val context: Context) {
-    private val serverUrlKey = stringPreferencesKey("server_url")
-    private val deviceIdKey = stringPreferencesKey("device_id")
-    private val deviceSecretKey = stringPreferencesKey("device_secret")
-
-    val config: Flow<DeviceConfig> = context.deviceConfigDataStore.data.map { preferences ->
-        DeviceConfig(preferences[serverUrlKey], preferences[deviceIdKey], preferences[deviceSecretKey])
+class DeviceConfigStore(context: Context) {
+    private val appContext = context.applicationContext
+    private val prefs: SharedPreferences by lazy {
+        val masterKey = MasterKey.Builder(appContext)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        EncryptedSharedPreferences.create(
+            appContext,
+            "device_config_secure",
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
     }
 
-    suspend fun save(config: DeviceConfig) {
-        context.deviceConfigDataStore.edit { preferences ->
-            config.serverUrl?.let { preferences[serverUrlKey] = it }
-            config.deviceId?.let { preferences[deviceIdKey] = it }
-            config.deviceSecret?.let { preferences[deviceSecretKey] = it }
-        }
+    private val _config = MutableStateFlow(read())
+    val config: StateFlow<DeviceConfig> = _config.asStateFlow()
+
+    suspend fun save(serverUrl: String?, deviceId: String?, deviceSecret: String?) = withContext(Dispatchers.IO) {
+        prefs.edit().apply {
+            serverUrl?.let { putString(KEY_SERVER_URL, it) }
+            deviceId?.let { putString(KEY_DEVICE_ID, it) }
+            deviceSecret?.let { putString(KEY_DEVICE_SECRET, it) }
+        }.apply()
+        _config.value = read()
+    }
+
+    suspend fun clear() = withContext(Dispatchers.IO) {
+        prefs.edit().clear().apply()
+        _config.value = DeviceConfig(null, null, null)
+    }
+
+    private fun read(): DeviceConfig = DeviceConfig(
+        serverUrl = prefs.getString(KEY_SERVER_URL, null),
+        deviceId = prefs.getString(KEY_DEVICE_ID, null),
+        deviceSecret = prefs.getString(KEY_DEVICE_SECRET, null)
+    )
+
+    companion object {
+        private const val KEY_SERVER_URL = "server_url"
+        private const val KEY_DEVICE_ID = "device_id"
+        private const val KEY_DEVICE_SECRET = "device_secret"
     }
 }
 
-data class DeviceConfig(val serverUrl: String?, val deviceId: String?, val deviceSecret: String?)
+data class DeviceConfig(val serverUrl: String?, val deviceId: String?, val deviceSecret: String?) {
+    val isPaired: Boolean
+        get() = !serverUrl.isNullOrBlank() && !deviceId.isNullOrBlank() && !deviceSecret.isNullOrBlank()
+}
