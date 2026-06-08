@@ -49,12 +49,15 @@ import com.example.bankgateway.data.local.AllowedPackageEntity
 import com.example.bankgateway.data.local.DatabaseProvider
 import com.example.bankgateway.data.local.NotificationLogEntity
 import com.example.bankgateway.data.preferences.DeviceConfigStore
+import com.example.bankgateway.data.repository.NotificationRepository
 import com.example.bankgateway.data.repository.PairingRepository
 import com.example.bankgateway.service.HeartbeatWorker
 import com.example.bankgateway.service.NotificationRetryWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.time.Instant
 import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
@@ -297,8 +300,12 @@ fun LogCard(log: NotificationLogEntity) {
 @Composable
 fun SettingsScreen(onOpenNotificationSettings: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val configStore = remember { DeviceConfigStore(context.applicationContext) }
     val config by configStore.config.collectAsState(initial = null)
+    val isPaired = config?.serverUrl != null && config?.deviceId != null && config?.deviceSecret != null
+    var testStatus by remember { mutableStateOf("") }
+    var isSending by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Settings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -310,8 +317,67 @@ fun SettingsScreen(onOpenNotificationSettings: () -> Unit) {
             Text("Open Notification Access Settings")
         }
 
+        Divider()
+        Text("Connection Test", fontWeight = FontWeight.Bold)
+        Text("Sends a fake Vietcombank notification to the paired server.")
+        Button(
+            enabled = isPaired && !isSending,
+            onClick = {
+                val currentConfig = config ?: return@Button
+                scope.launch {
+                    isSending = true
+                    testStatus = "Sending..."
+                    try {
+                        val rawBody = buildTestNotificationPayload()
+                        withContext(Dispatchers.IO) {
+                            val database = DatabaseProvider.get(context.applicationContext)
+                            NotificationRepository(
+                                database.queuedNotificationDao(),
+                                database.notificationLogDao()
+                            ).sendOrQueue(
+                                config = currentConfig,
+                                packageName = "com.example.bankgateway.test",
+                                title = "Vietcombank",
+                                text = "TK 0123456789 +500,000VND luc 08/06/2026 14:30. So du 2,500,000VND. ND: TEST GATEWAY",
+                                rawBody = rawBody
+                            )
+                        }
+                        testStatus = "Sent. Check Logs tab to see sent or queued result."
+                    } catch (exception: Throwable) {
+                        testStatus = "Error: ${exception.message}"
+                    } finally {
+                        isSending = false
+                    }
+                }
+            }
+        ) {
+            Text(if (isSending) "Sending..." else "Send Test Notification")
+        }
+        if (testStatus.isNotBlank()) {
+            Text(testStatus)
+        }
+        if (!isPaired) {
+            Text("Pair the device first to enable the test button.")
+        }
+
+        Divider()
         Text("Background workers are scheduled every 15 minutes with network connectivity required.")
     }
+}
+
+private fun buildTestNotificationPayload(): String {
+    val now = Instant.now()
+    val notificationKey = "test|${now.toEpochMilli()}"
+    return JSONObject()
+        .put("package_name", "com.example.bankgateway.test")
+        .put("app_name", "Vietcombank (Test)")
+        .put("title", "Vietcombank")
+        .put("text", "TK 0123456789 +500,000VND luc 08/06/2026 14:30. So du 2,500,000VND. ND: TEST GATEWAY")
+        .put("big_text", JSONObject.NULL)
+        .put("posted_at", now.toString())
+        .put("notification_key", notificationKey)
+        .put("raw", JSONObject().put("id", 0).put("tag", "test").put("source", "manual-test"))
+        .toString()
 }
 
 data class AppListItem(
