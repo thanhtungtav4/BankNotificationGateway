@@ -437,16 +437,19 @@ internal fun isValidServerUrl(url: String): Boolean {
 private fun buildTestNotificationPayload(): String {
     val now = Instant.now()
     val notificationKey = "test|${now.toEpochMilli()}"
-    return JSONObject()
-        .put("package_name", "com.banknotif.gateway.test")
+    val json = JSONObject()
+ .put("package_name", "com.banknotif.gateway.test")
         .put("app_name", "Vietcombank (Test)")
         .put("title", "Vietcombank")
         .put("text", "TK 0123456789 +500,000VND luc 08/06/2026 14:30. So du 2,500,000VND. ND: TEST GATEWAY")
-        .put("big_text", JSONObject.NULL)
         .put("posted_at", now.toString())
         .put("notification_key", notificationKey)
-        .put("raw", JSONObject().put("id", 0).put("tag", "test").put("source", "manual-test"))
-        .toString()
+    val raw = JSONObject()
+        .put("id", 0)
+        .put("tag", "test")
+        .put("source", "manual-test")
+    json.put("raw", raw)
+    return json.toString()
 }
 
 data class AppListItem(

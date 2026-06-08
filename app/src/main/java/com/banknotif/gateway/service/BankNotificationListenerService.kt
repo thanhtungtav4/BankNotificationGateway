@@ -47,7 +47,6 @@ class BankNotificationListenerService : NotificationListenerService() {
                 .put("app_name", appName)
                 .put("title", title)
                 .put("text", text)
-                .put("big_text", bigText)
                 .put("posted_at", Instant.ofEpochMilli(sbn.postTime).toString())
                 .put("notification_key", notificationKey)
                 .put("raw", JSONObject().put("id", sbn.id).put("tag", sbn.tag))
