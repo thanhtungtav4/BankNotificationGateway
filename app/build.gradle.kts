@@ -6,15 +6,30 @@ plugins {
 }
 
 android {
-    namespace = "com.example.bankgateway"
+    namespace = "com.banknotif.gateway"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.bankgateway"
+        applicationId = "com.banknotif.gateway"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
+    }
+
+    signingConfigs {
+        getByName("debug") {
+            storeFile = rootProject.file("debug.keystore")
+            storePassword = "bankgateway"
+            keyAlias = "bankgateway"
+            keyPassword = "bankgateway"
+        }
+    }
+
+    buildTypes {
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("debug")
+        }
     }
 
     buildFeatures {

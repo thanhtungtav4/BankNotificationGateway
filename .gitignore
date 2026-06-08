@@ -16,6 +16,8 @@ captures/
 # Mac
 .DS_Store
 
-# Keys
+# Keys (release secrets only; debug.keystore is intentionally checked in
+# so debug APKs from CI install on top of previous debug builds)
 *.jks
 *.keystore
+!debug.keystore
