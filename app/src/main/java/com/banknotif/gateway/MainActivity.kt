@@ -51,6 +51,8 @@ import com.banknotif.gateway.data.local.NotificationLogEntity
 import com.banknotif.gateway.data.preferences.DeviceConfigStore
 import com.banknotif.gateway.data.repository.NotificationRepository
 import com.banknotif.gateway.data.repository.PairingRepository
+import com.banknotif.gateway.pairing.QrScanResult
+import com.banknotif.gateway.pairing.scanPairingQr
 import com.banknotif.gateway.service.HeartbeatWorker
 import com.banknotif.gateway.service.NotificationRetryWorker
 import kotlinx.coroutines.Dispatchers
@@ -146,9 +148,55 @@ fun PairingScreen() {
     var status by remember { mutableStateOf("Not paired") }
     var isLoading by remember { mutableStateOf(false) }
 
+    fun pairNow(url: String, token: String, name: String) {
+        if (!isValidServerUrl(url)) {
+            status = "Invalid server URL. Use http:// or https://"
+            return
+        }
+        scope.launch {
+            isLoading = true
+            status = "Pairing..."
+            try {
+                withContext(Dispatchers.IO) {
+                    PairingRepository(configStore).pair(url.trim(), token.trim(), name.trim())
+                }
+                status = "Paired successfully"
+            } catch (exception: Throwable) {
+                status = "Pairing failed: ${exception.message}"
+            } finally {
+                isLoading = false
+            }
+        }
+    }
+
     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Pair Device", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Text("Use manual pairing first. QR scan can be added after server dashboard creates QR payloads.")
+        Text("Scan the QR shown on the server dashboard or paste the values manually.")
+
+        Button(
+            enabled = !isLoading,
+            onClick = {
+                status = "Opening scanner..."
+                scanPairingQr(context) { result ->
+                    when (result) {
+                        is QrScanResult.Success -> {
+                            serverUrl = result.serverUrl
+                            pairingToken = result.pairingToken
+                            status = "QR detected, pairing..."
+                            pairNow(result.serverUrl, result.pairingToken, deviceName)
+                        }
+                        is QrScanResult.Error -> {
+                            status = "Scan failed: ${result.message}"
+                        }
+                        QrScanResult.Cancelled -> {
+                            status = "Scan cancelled"
+                        }
+                    }
+                }
+            }
+        ) {
+            Text("Scan QR")
+        }
 
         OutlinedTextField(
             value = serverUrl,
@@ -176,26 +224,7 @@ fun PairingScreen() {
 
         Button(
             enabled = !isLoading,
-            onClick = {
-                if (!isValidServerUrl(serverUrl)) {
-                    status = "Invalid server URL. Use http:// or https://"
-                    return@Button
-                }
-                scope.launch {
-                    isLoading = true
-                    status = "Pairing..."
-                    try {
-                        withContext(Dispatchers.IO) {
-                            PairingRepository(configStore).pair(serverUrl.trim(), pairingToken.trim(), deviceName.trim())
-                        }
-                        status = "Paired successfully"
-                    } catch (exception: Throwable) {
-                        status = "Pairing failed: ${exception.message}"
-                    } finally {
-                        isLoading = false
-                    }
-                }
-            }
+            onClick = { pairNow(serverUrl, pairingToken, deviceName) }
         ) {
             Text(if (isLoading) "Pairing..." else "Pair Device")
         }
