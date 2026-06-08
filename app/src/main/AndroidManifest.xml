@@ -1,0 +1,78 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <queries>
+        <!-- Vietnamese bank apps: package names can change by app generation/version. Verify on real devices before production. -->
+        <package android:name="com.mbmobile" />
+        <package android:name="com.vietcombank" />
+        <package android:name="com.VCB" />
+        <package android:name="com.acb.mobile" />
+        <package android:name="mobile.acb.com.vn" />
+        <package android:name="vn.com.techcombank.bb.app" />
+        <package android:name="com.tpb.mb.gprsandroid" />
+        <package android:name="com.vnpay.vpbankonline" />
+        <package android:name="com.vietinbank.ipay" />
+        <package android:name="com.bidv.smartbanking" />
+        <package android:name="com.vnpay.bidv" />
+        <package android:name="vn.com.msb.smartBanking" />
+        <package android:name="vn.com.seabank.mb1" />
+        <package android:name="com.vnpay.SCB" />
+        <package android:name="com.vnpay.hdbank" />
+        <package android:name="com.vnpay.OCB" />
+        <package android:name="com.vnpay.sacombank" />
+        <package android:name="com.vnpay.namabank" />
+        <package android:name="com.vnpay.vietabank" />
+        <package android:name="vn.shb.mbanking" />
+        <package android:name="com.vnpay.shb" />
+        <package android:name="com.vnpay.vib" />
+        <package android:name="com.vib.mobileapp" />
+        <package android:name="com.vnpay.eximbank" />
+        <package android:name="com.vnpay.lienvietpostbank" />
+        <package android:name="com.lpbank.mobile" />
+        <package android:name="vn.com.pvcombank.retail" />
+        <package android:name="com.vnpay.pvcombank" />
+        <package android:name="com.vnpay.baca" />
+        <package android:name="com.vnpay.kienlongbank" />
+        <package android:name="com.vnpay.saigonbank" />
+        <package android:name="com.vnpay.ncb" />
+        <package android:name="com.vnpay.bvbank" />
+        <package android:name="com.vnpay.vietbank" />
+        <package android:name="com.vnpay.abbank" />
+        <package android:name="com.vnpay.pgbank" />
+        <package android:name="com.vnpay.gpbank" />
+        <package android:name="com.vnpay.cbbank" />
+        <package android:name="com.vnpay.oceanbank" />
+        <package android:name="vn.com.vpbank.neo" />
+        <package android:name="com.vpbank.vpbankneo" />
+        <package android:name="vn.com.vietcapitalbank.mobile" />
+        <package android:name="vn.com.vietbank.mobilebanking" />
+        <package android:name="com.mservice.momotransfer" />
+        <package android:name="vn.com.vng.zalopay" />
+    </queries>
+
+    <application
+        android:allowBackup="false"
+        android:label="Bank Gateway"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.BankGateway">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".service.BankNotificationListenerService"
+            android:exported="true"
+            android:label="Bank Gateway Notification Listener"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>
