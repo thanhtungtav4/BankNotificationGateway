@@ -26,7 +26,7 @@ jobs:
           gradle-version: 8.10.2
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: gradle assembleDebug --stacktrace
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v6
