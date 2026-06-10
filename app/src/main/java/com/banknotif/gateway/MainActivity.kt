@@ -846,12 +846,12 @@ fun SettingsScreen(onOpenNotificationSettings: () -> Unit) {
                                     config = currentConfig,
                                     packageName = "com.banknotif.gateway.test",
                                     title = "Vietcombank",
-                                    text = "Test notification",
+                                    text = "Vietcombank GD: +50,000 VND. ND: DH123456 thanh toan",
                                     rawBody = JSONObject()
                                         .put("package_name", "com.banknotif.gateway.test")
                                         .put("app_name", "Gateway Test")
                                         .put("title", "Vietcombank")
-                                        .put("text", "Test notification")
+                                        .put("text", "Vietcombank GD: +50,000 VND. ND: DH123456 thanh toan")
                                         .put("posted_at", Instant.now().toString())
                                         .put("notification_key", "test_key_" + System.currentTimeMillis())
                                         .toString()
