@@ -26,9 +26,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.SignalCellularAlt
+import androidx.compose.material.icons.filled.SignalCellular4Bar
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -183,7 +184,7 @@ fun BankGatewayApp(onOpenNotificationSettings: () -> Unit) {
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.SignalCellularAlt,
+                            imageVector = Icons.Default.SignalCellular4Bar,
                             contentDescription = null,
                             tint = Color.White,
                             modifier = Modifier.size(24.dp)
@@ -328,7 +329,7 @@ fun PairingScreen() {
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
-                        imageVector = Icons.Default.QrCodeScanner,
+                        imageVector = Icons.Default.CameraAlt,
                         contentDescription = null,
                         modifier = Modifier.size(48.dp),
                         tint = AccentBlue
@@ -479,12 +480,16 @@ fun PairedView(configStore: DeviceConfigStore) {
             onClick = {
                 scope.launch {
                     val currentConfig = config
-                    if (currentConfig.serverUrl != null && currentConfig.deviceId != null) {
+                    if (currentConfig.serverUrl != null && currentConfig.deviceId != null && currentConfig.deviceSecret != null) {
                         withContext(Dispatchers.IO) {
                             try {
+                                val requestBody = JSONObject()
+                                    .put("device_id", currentConfig.deviceId)
+                                    .put("device_secret", currentConfig.deviceSecret)
+                                    .toString()
                                 val request = Request.Builder()
                                     .url(currentConfig.serverUrl.trimEnd('/') + "/api/v1/mobile/unpair")
-                                    .post("{\"device_id\":\"${currentConfig.deviceId}\"}".toRequestBody("application/json".toMediaType()))
+                                    .post(requestBody.toRequestBody("application/json".toMediaType()))
                                     .header("Content-Type", "application/json")
                                     .build()
                                 ApiClient.httpClient.newCall(request).execute().use { }
@@ -519,7 +524,7 @@ fun InfoRow(label: String, value: String, mono: Boolean = false) {
             text = value,
             style = MaterialTheme.typography.bodyMedium,
             color = TextPrimary,
-            fontFamily = if (mono) androidx.compose.ui.text.font.Font.Monospace else androidx.compose.ui.text.font.Font.Default,
+            fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false)
