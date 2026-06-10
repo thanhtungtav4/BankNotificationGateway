@@ -847,7 +847,14 @@ fun SettingsScreen(onOpenNotificationSettings: () -> Unit) {
                                     packageName = "com.banknotif.gateway.test",
                                     title = "Vietcombank",
                                     text = "Test notification",
-                                    rawBody = "{}"
+                                    rawBody = JSONObject()
+                                        .put("package_name", "com.banknotif.gateway.test")
+                                        .put("app_name", "Gateway Test")
+                                        .put("title", "Vietcombank")
+                                        .put("text", "Test notification")
+                                        .put("posted_at", Instant.now().toString())
+                                        .put("notification_key", "test_key_" + System.currentTimeMillis())
+                                        .toString()
                                 )
                             }
                             testStatus = "Test sent!"
