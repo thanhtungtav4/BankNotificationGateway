@@ -132,6 +132,13 @@ class MainActivity : ComponentActivity() {
                     BankGatewayApp(
                         onOpenNotificationSettings = {
                             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                        },
+                        onOpenOverlaySettings = {
+                            val intent = Intent(
+                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                android.net.Uri.parse("package:$packageName")
+                            )
+                            startActivity(intent)
                         }
                     )
                 }
@@ -156,7 +163,10 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun BankGatewayApp(onOpenNotificationSettings: () -> Unit) {
+fun BankGatewayApp(
+    onOpenNotificationSettings: () -> Unit,
+    onOpenOverlaySettings: () -> Unit
+) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Pair", "Apps", "Logs", "Settings")
 
@@ -242,7 +252,7 @@ fun BankGatewayApp(onOpenNotificationSettings: () -> Unit) {
             0 -> PairingScreen()
             1 -> WhitelistScreen()
             2 -> LogsScreen()
-            3 -> SettingsScreen(onOpenNotificationSettings)
+            3 -> SettingsScreen(onOpenNotificationSettings, onOpenOverlaySettings)
         }
     }
 }
@@ -746,15 +756,43 @@ fun LogCard(log: NotificationLogEntity) {
 }
 
 @Composable
-fun SettingsScreen(onOpenNotificationSettings: () -> Unit) {
+fun SettingsScreen(
+    onOpenNotificationSettings: () -> Unit,
+    onOpenOverlaySettings: () -> Unit
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val configStore = remember { DeviceConfigStore(context.applicationContext) }
     val config by configStore.config.collectAsState()
     val isPaired = config.isPaired
-    val listenerEnabled = isNotificationListenerEnabled(context)
+
+    var listenerEnabled by remember { mutableStateOf(isNotificationListenerEnabled(context)) }
+    var overlayEnabled by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
     var testStatus by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
+
+    // Auto refresh permissions on resume
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                listenerEnabled = isNotificationListenerEnabled(context)
+                overlayEnabled = Settings.canDrawOverlays(context)
+                if (listenerEnabled && overlayEnabled) {
+                    try {
+                        val intent = Intent(context, com.banknotif.gateway.service.BankNotificationListenerService::class.java).apply {
+                            action = "ACTION_SHOW_OVERLAY"
+                        }
+                        context.startService(intent)
+                    } catch (_: Exception) {}
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -815,6 +853,55 @@ fun SettingsScreen(onOpenNotificationSettings: () -> Unit) {
             colors = ButtonDefaults.buttonColors(containerColor = DarkCard)
         ) {
             Text("Open Access Settings")
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Overlay Permission Status
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = if (overlayEnabled) AccentGreen.copy(alpha = 0.1f) else AccentOrange.copy(alpha = 0.1f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = if (overlayEnabled) Icons.Default.CheckCircle else Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = if (overlayEnabled) AccentGreen else AccentOrange,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Display Over Other Apps",
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = if (overlayEnabled) "Enabled (Floating Status Dot active)" else "Disabled",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (overlayEnabled) AccentGreen else AccentOrange
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Button(
+            onClick = onOpenOverlaySettings,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = DarkCard)
+        ) {
+            Text("Open Overlay Settings")
         }
 
         Spacer(modifier = Modifier.height(24.dp))
