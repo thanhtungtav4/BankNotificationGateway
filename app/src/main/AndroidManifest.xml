@@ -5,6 +5,7 @@
 
     <queries>
         <!-- Vietnamese bank apps: package names can change by app generation/version. Verify on real devices before production. -->
+        <package android:name="com.viettel.viettelpay" />
         <package android:name="com.mbmobile" />
         <package android:name="com.vietcombank" />
         <package android:name="com.VCB" />
