@@ -2,7 +2,10 @@ package com.banknotif.gateway
 
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -139,6 +142,19 @@ class MainActivity : ComponentActivity() {
                                 android.net.Uri.parse("package:$packageName")
                             )
                             startActivity(intent)
+                        },
+                        onOpenBatterySettings = {
+                            try {
+                                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                    data = android.net.Uri.parse("package:$packageName")
+                                }
+                                startActivity(intent)
+                            } catch (e: Exception) {
+                                try {
+                                    val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                                    startActivity(intent)
+                                } catch (_: Exception) {}
+                            }
                         }
                     )
                 }
@@ -165,7 +181,8 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun BankGatewayApp(
     onOpenNotificationSettings: () -> Unit,
-    onOpenOverlaySettings: () -> Unit
+    onOpenOverlaySettings: () -> Unit,
+    onOpenBatterySettings: () -> Unit
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("Pair", "Apps", "Logs", "Settings")
@@ -252,7 +269,7 @@ fun BankGatewayApp(
             0 -> PairingScreen()
             1 -> WhitelistScreen()
             2 -> LogsScreen()
-            3 -> SettingsScreen(onOpenNotificationSettings, onOpenOverlaySettings)
+            3 -> SettingsScreen(onOpenNotificationSettings, onOpenOverlaySettings, onOpenBatterySettings)
         }
     }
 }
@@ -758,7 +775,8 @@ fun LogCard(log: NotificationLogEntity) {
 @Composable
 fun SettingsScreen(
     onOpenNotificationSettings: () -> Unit,
-    onOpenOverlaySettings: () -> Unit
+    onOpenOverlaySettings: () -> Unit,
+    onOpenBatterySettings: () -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -768,6 +786,7 @@ fun SettingsScreen(
 
     var listenerEnabled by remember { mutableStateOf(isNotificationListenerEnabled(context)) }
     var overlayEnabled by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    var batteryOptimizationsIgnored by remember { mutableStateOf(isIgnoringBatteryOptimizations(context)) }
     var testStatus by remember { mutableStateOf("") }
     var isSending by remember { mutableStateOf(false) }
 
@@ -778,6 +797,7 @@ fun SettingsScreen(
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 listenerEnabled = isNotificationListenerEnabled(context)
                 overlayEnabled = Settings.canDrawOverlays(context)
+                batteryOptimizationsIgnored = isIgnoringBatteryOptimizations(context)
                 if (listenerEnabled && overlayEnabled) {
                     try {
                         val intent = Intent(context, com.banknotif.gateway.service.BankNotificationListenerService::class.java).apply {
@@ -904,6 +924,55 @@ fun SettingsScreen(
             Text("Open Overlay Settings")
         }
 
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Battery Optimization Status Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = if (batteryOptimizationsIgnored) AccentGreen.copy(alpha = 0.1f) else AccentOrange.copy(alpha = 0.1f)
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = if (batteryOptimizationsIgnored) Icons.Default.CheckCircle else Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = if (batteryOptimizationsIgnored) AccentGreen else AccentOrange,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Battery Optimization",
+                        fontWeight = FontWeight.SemiBold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = if (batteryOptimizationsIgnored) "Disabled (Background sleep stable)" else "Enabled (Service may be closed when sleeping)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (batteryOptimizationsIgnored) AccentGreen else AccentOrange
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Button(
+            onClick = onOpenBatterySettings,
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = DarkCard)
+        ) {
+            Text("Request Background Execution")
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
 
         // Connection Test
@@ -997,6 +1066,15 @@ fun SettingsScreen(
 private fun isNotificationListenerEnabled(context: android.content.Context): Boolean {
     val enabled = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners") ?: return false
     return enabled.split(":").any { it.startsWith("${context.packageName}/") }
+}
+
+private fun isIgnoringBatteryOptimizations(context: android.content.Context): Boolean {
+    val pm = context.getSystemService(android.content.Context.POWER_SERVICE) as PowerManager
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        pm.isIgnoringBatteryOptimizations(context.packageName)
+    } else {
+        true
+    }
 }
 
 internal fun isValidServerUrl(url: String): Boolean {
